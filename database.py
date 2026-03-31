@@ -1,50 +1,58 @@
 import streamlit as st
-from supabase import create_client
+import time
+from database import obtener_usuario  # Importamos la función que creamos antes
 
-# Configuración de conexión (usando st.secrets para GitHub/Streamlit Cloud)
-url = st.secrets["SUPABASE_URL"]
-key = st.secrets["SUPABASE_KEY"]
-supabase = create_client(url, key)
-
-def filtrar_por_empresa(tabla):
-    """
-    Función maestra para asegurar el aislamiento de datos.
-    """
-    if "empresa_id" in st.session_state:
-        return supabase.table(tabla).select("*").eq("empresa_id", st.session_state.empresa_id).execute()
-    return None
-
-def validar_suscripcion(empresa_id):
-    """
-    Verifica si la empresa tiene el pago al día.
-    """
-    res = supabase.table("empresas").select("fecha_vencimiento, estado").eq("id", empresa_id).single().execute()
-    return res.data
-
-# --- Añadir al final de tu archivo database.py ---
-
-def obtener_usuario(email):
-    """
-    Busca un usuario por su correo para el proceso de Login.
-    """
-    try:
-        res = supabase.table("usuarios").select("*, empresas(*)").eq("email", email).single().execute()
-        return res.data
-    except Exception:
-        return None
-
-def subir_archivo_storage(file, empresa_id, nombre_archivo):
-    """
-    Sube archivos al bucket de Supabase organizados por empresa.
-    """
-    # Ruta modular: empresa_id/documentos/nombre_archivo
-    path = f"{empresa_id}/documentos/{nombre_archivo}"
+def mostrar_login():
+    # Centrar el contenido
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    try:
-        # 'documentos_sgi' debe ser el nombre de tu bucket en Supabase
-        res = supabase.storage.from_("documentos_sgi").upload(path, file, {"upsert": "true"})
-        # Retorna la URL pública del archivo
-        return supabase.storage.from_("documentos_sgi").get_public_url(path)
-    except Exception as e:
-        st.error(f"Error al subir: {e}")
-        return None
+    with col2:
+        # 1. Tu Logo de TAMTARA (Como proveedor de confianza)
+        st.image("Logo Tamtara sin nombre.png", width=120)
+        
+        # 2. Título Institucional (Sin mencionar TAMTARA en el saludo)
+        st.subheader("🌐 Bienvenido a la App del SGI")
+        st.caption("Gestión Integrada de Calidad, SST y Medio Ambiente")
+        
+        with st.form("form_login", clear_on_submit=False):
+            email = st.text_input("Correo Electrónico", placeholder="ejemplo@empresa.com")
+            password = st.text_input("Contraseña", type="password")
+            btn_entrar = st.form_submit_button("Ingresar al Sistema", use_container_width=True)
+            
+            if btn_entrar:
+                if email and password:
+                    # Buscamos al usuario en Supabase
+                    user_data = obtener_usuario(email)
+                    
+                    if user_data and user_data['password_hash'] == password: # Nota: Luego usaremos hashing real
+                        # --- VALIDACIÓN DE SEGURIDAD Y PAGOS ---
+                        empresa = user_data.get('empresas')
+                        
+                        if empresa:
+                            from datetime import datetime
+                            fecha_ven = datetime.strptime(empresa['fecha_vencimiento'], '%Y-%m-%d').date()
+                            hoy = datetime.now().date()
+                            
+                            if hoy > fecha_ven or empresa['estado'] == 'Mora':
+                                st.error("🚨 El acceso ha sido suspendido por vencimiento de suscripción. Contacte a su consultor TAMTARA.")
+                            else:
+                                # Guardamos los datos en la sesión
+                                st.session_state.autenticado = True
+                                st.session_state.usuario = user_data['nombre_completo']
+                                st.session_state.rol = user_data['rol']
+                                st.session_state.empresa_id = user_data['empresa_id']
+                                st.session_state.nombre_empresa = empresa['nombre']
+                                st.session_state.logo_empresa = empresa['logo_url']
+                                
+                                st.success(f"Bienvenido(a), {user_data['nombre_completo']}")
+                                time.sleep(1)
+                                st.rerun()
+                        else:
+                            st.error("Error: Empresa no vinculada.")
+                    else:
+                        st.error("Credenciales incorrectas. Verifique su correo o contraseña.")
+                else:
+                    st.warning("Por favor, complete todos los campos.")
+
+        st.markdown("---")
+        st.caption("© 2026 TAMTARA - Soluciones en Sistemas de Gestión")
