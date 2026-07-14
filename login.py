@@ -59,8 +59,8 @@ def mostrar_login():
             
             if btn_entrar:
                 if email and password:
-                    # Buscamos el usuario en la base de datos
-                    user_data = obtener_usuario(email)
+                    # CAMBIO CLAVE: Enviamos el email limpio de espacios extras
+                    user_data = obtener_usuario(email.strip())
                     
                     if user_data and user_data['password_hash'] == password:
                         raw_empresa = user_data.get('empresas')
