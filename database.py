@@ -10,14 +10,16 @@ supabase = create_client(url, key)
 def obtener_usuario(email):
     """Busca un usuario y trae los datos de su empresa asociada."""
     try:
-        res = supabase.table("usuarios").select("*, empresas(*)").eq("email", email).single().execute()
+        # CAMBIO CLAVE: Usamos .ilike() en lugar de .eq() para ignorar mayúsculas/minúsculas
+        # y aplicamos .strip() para remover espacios vacíos que se copien por error.
+        res = supabase.table("usuarios").select("*, empresas(*)").ilike("email", email.strip()).single().execute()
         return res.data
     except Exception as e:
-        # Si el error es simplemente que el usuario no existe (0 filas)
+        # Si el error es PGRST116 (0 filas encontradas), devolvemos None de manera silenciosa
         if hasattr(e, 'message') and 'PGRST116' in str(e):
             return None
         
-        # Para cualquier otro error real (de conexión, de red, etc.), lo mostramos en consola
+        # Cualquier otro error técnico real de red o conexión sí se mostrará
         st.error(f"Error de base de datos: {e}")
         return None
 
