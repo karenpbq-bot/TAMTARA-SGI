@@ -51,7 +51,7 @@ def mostrar_login():
         with st.form("form_login", clear_on_submit=False):
             # Título principal
             st.markdown("<h2 style='text-align: center; color: #4A4E5A;'>Bienvenido a la App del SGI</h2>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align: center; color: #8CC0D8;'>Gestión de Calidad, SST y Medio Ambiente</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #8CC0D8;'>Gestión de Procesos</p>", unsafe_allow_html=True)
             
             email = st.text_input("Correo Electrónico", placeholder="usuario@empresa.com")
             password = st.text_input("Contraseña", type="password")
