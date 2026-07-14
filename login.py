@@ -59,28 +59,45 @@ def mostrar_login():
             
             if btn_entrar:
                 if email and password:
+                    # Buscamos el usuario en la base de datos
                     user_data = obtener_usuario(email)
                     
                     if user_data and user_data['password_hash'] == password:
-                        empresa = user_data.get('empresas')
+                        raw_empresa = user_data.get('empresas')
+                        
+                        # Corrección de la estructura relacional (Supabase devuelve la relación como lista)
+                        empresa = None
+                        if isinstance(raw_empresa, list) and len(raw_empresa) > 0:
+                            empresa = raw_empresa[0]
+                        elif isinstance(raw_empresa, dict):
+                            empresa = raw_empresa
                         
                         if empresa:
-                            fecha_ven = datetime.strptime(empresa['fecha_vencimiento'], '%Y-%m-%d').date()
-                            hoy = datetime.now().date()
-                            
-                            if hoy > fecha_ven or empresa['estado'] == 'Mora':
-                                st.error("🚨 Acceso suspendido por vencimiento. Contacte a TAMTARA.")
-                            else:
-                                st.session_state.autenticado = True
-                                st.session_state.usuario = user_data['nombre_completo']
-                                st.session_state.rol = user_data['rol']
-                                st.session_state.empresa_id = user_data['empresa_id']
-                                st.session_state.nombre_empresa = empresa['nombre']
-                                st.session_state.logo_empresa = empresa['logo_url']
+                            try:
+                                # Convertir la fecha de vencimiento de manera segura
+                                if isinstance(empresa['fecha_vencimiento'], str):
+                                    fecha_ven = datetime.strptime(empresa['fecha_vencimiento'], '%Y-%m-%d').date()
+                                else:
+                                    fecha_ven = empresa['fecha_vencimiento']
+                                    
+                                hoy = datetime.now().date()
                                 
-                                st.success(f"Bienvenido(a), {user_data['nombre_completo']}")
-                                time.sleep(1)
-                                st.rerun()
+                                if hoy > fecha_ven or empresa.get('estado') == 'Mora':
+                                    st.error("🚨 Acceso suspendido por vencimiento. Contacte a TAMTARA.")
+                                else:
+                                    # Inicialización exitosa de variables de sesión
+                                    st.session_state.autenticado = True
+                                    st.session_state.usuario = user_data['nombre_completo']
+                                    st.session_state.rol = user_data['rol']
+                                    st.session_state.empresa_id = user_data['empresa_id']
+                                    st.session_state.nombre_empresa = empresa['nombre']
+                                    st.session_state.logo_empresa = empresa.get('logo_url')
+                                    
+                                    st.success(f"Bienvenido(a), {user_data['nombre_completo']}")
+                                    time.sleep(1)
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"Error procesando los datos de suscripción: {e}")
                         else:
                             st.error("Error: Empresa no vinculada.")
                     else:
@@ -88,4 +105,4 @@ def mostrar_login():
                 else:
                     st.warning("Por favor, complete los campos.")
 
-        st.markdown("<p style='text-align: center; color: #4A4E5A; font-size: 0.8rem; margin-top: 20px;'>© 2026 TAMTARA - Soluciones en Sistemas de Gestión</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #4A4E5A; font-size: 0.8rem; margin-top: 20px;'>© 2026 TAMTARA - Soluciones en Gestión de Procesos</p>", unsafe_allow_html=True)
