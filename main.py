@@ -27,14 +27,25 @@ if not st.session_state.autenticado:
 else:
     # --- INTERFAZ PRINCIPAL (POST-LOGIN) ---
     
-    # Determinar opciones del menú según el nivel de administración
-    # Al ser la creadora (TAMTARA), tendrás acceso a todas las opciones globales.
+    # Verificamos si es la empresa administradora (TAMTARA)
     es_admin = st.session_state.get("es_administradora", False)
     
+    # Definimos los menús correspondientes
     if es_admin:
-        opciones_menu = ["🏠 Inicio", "👥 Gestión de Clientes", "📂 Documentos del SGI", "⚙️ Configuración Global"]
+        opciones_menu = [
+            "🏠 Inicio TAMTARA", 
+            "👥 Gestión de Clientes", 
+            "⚙️ Configuración Global"
+        ]
     else:
-        opciones_menu = ["🏠 Inicio", "📂 Documentos del SGI"]
+        # Los módulos transaccionales que generarán la data para el cliente
+        opciones_menu = [
+            "📂 Documentos del SGI",
+            "📊 Gestión de Indicadores",
+            "📈 Gestión de Mejora",
+            "📝 Auditoría y Autoevaluación",
+            "🔄 Gestión de Procesos"
+        ]
 
     # --- BARRA LATERAL ---
     with st.sidebar:
@@ -55,8 +66,8 @@ else:
         
         st.divider()
         
-        # MENÚ DE NAVEGACIÓN DINÁMICO
-        st.subheader("Navegación")
+        # MENÚ DE NAVEGACIÓN
+        st.subheader("Menú del SGI")
         modulo_seleccionado = st.radio(
             "Seleccione un módulo:",
             options=opciones_menu,
@@ -72,34 +83,88 @@ else:
 
     # --- CUERPO PRINCIPAL (RENDERIZADO DINÁMICO) ---
     
-    if modulo_seleccionado == "🏠 Inicio":
-        st.title(f"Bienvenido a la App del SGI")
-        st.info(f"Has ingresado correctamente al sistema de **{st.session_state.nombre_empresa}**.")
+    # --- VISTAS DEL ADMINISTRADOR (TAMTARA) ---
+    if modulo_seleccionado == "🏠 Inicio TAMTARA":
+        st.title("Panel Administrativo de TAMTARA SGI")
+        st.info("Has ingresado como Administrador Global del Sistema de Gestión Integrado.")
         st.write("---")
-        st.subheader("Panel de Control")
-        st.write("Utiliza el menú lateral de navegación para gestionar tus procesos de SGI de forma centralizada.")
-        
+        st.subheader("Indicadores del Negocio")
+        st.write("Aquí se visualizarán las métricas de tus clientes activos, estado de sus suscripciones y alertas de soporte.")
+
     elif modulo_seleccionado == "👥 Gestión de Clientes":
         st.title("👥 Gestión de Clientes (TAMTARA)")
         st.write("---")
         try:
-            # Importación bajo demanda del archivo clientes.py
             import clientes
-            # Aquí llamaremos a la función principal que contendrá clientes.py
             if hasattr(clientes, "mostrar_modulo_clientes"):
                 clientes.mostrar_modulo_clientes()
             else:
-                st.warning("El módulo de clientes está listo para recibir el código. Por ahora no contiene la función 'mostrar_modulo_clientes'.")
+                st.info("Módulo 'clientes.py' cargado correctamente. Listo para recibir la función 'mostrar_modulo_clientes'.")
         except ModuleNotFoundError:
-            st.error("No se encontró el archivo modular 'clientes.py'. Asegúrate de que exista en tu directorio.")
-            
+            st.error("No se encontró el archivo modular 'clientes.py' en el directorio.")
+
+    elif modulo_seleccionado == "⚙️ Configuración Global":
+        st.title("⚙️ Configuración Global de la Plataforma")
+        st.write("---")
+        st.info("Configuraciones del sistema, administración de base de datos y logs de auditoría.")
+
+    # --- VISTAS DEL CLIENTE (MÓDULOS DE DATA) ---
     elif modulo_seleccionado == "📂 Documentos del SGI":
         st.title("📂 Gestión Documental del SGI")
         st.write("---")
-        st.info("Aquí podrás subir, filtrar y organizar los documentos del Sistema de Gestión Integrado.")
-        # Posteriormente importaremos un módulo de documentos aquí
-        
-    elif modulo_seleccionado == "⚙️ Configuración Global":
-        st.title("⚙️ Configuración de la Plataforma")
+        try:
+            import documentos
+            if hasattr(documentos, "mostrar_modulo_documentos"):
+                documentos.mostrar_modulo_documentos()
+            else:
+                st.info("Módulo de Gestión Documental. Listo para recibir la función 'mostrar_modulo_documentos'.")
+        except ModuleNotFoundError:
+            st.warning("El archivo modular 'documentos.py' aún no ha sido creado en el directorio.")
+
+    elif modulo_seleccionado == "📊 Gestión de Indicadores":
+        st.title("📊 Gestión de Indicadores")
         st.write("---")
-        st.info("Panel exclusivo para TAMTARA. Modificación de parámetros de la base de datos, licencias y auditorías.")
+        try:
+            import indicadores
+            if hasattr(indicadores, "mostrar_modulo_indicadores"):
+                indicadores.mostrar_modulo_indicadores()
+            else:
+                st.info("Módulo de Gestión de Indicadores (KPIs). Listo para recibir la función 'mostrar_modulo_indicadores'.")
+        except ModuleNotFoundError:
+            st.warning("El archivo modular 'indicadores.py' aún no ha sido creado en el directorio.")
+
+    elif modulo_seleccionado == "📈 Gestión de Mejora":
+        st.title("📈 Gestión de Mejora")
+        st.write("---")
+        try:
+            import mejora
+            if hasattr(mejora, "mostrar_modulo_mejora"):
+                mejora.mostrar_modulo_mejora()
+            else:
+                st.info("Módulo de Acciones Correctivas y Preventivas (CAPA). Listo para recibir la función 'mostrar_modulo_mejora'.")
+        except ModuleNotFoundError:
+            st.warning("El archivo modular 'mejora.py' aún no ha sido creado en el directorio.")
+
+    elif modulo_seleccionado == "📝 Auditoría y Autoevaluación":
+        st.title("📝 Auditoría y Autoevaluación")
+        st.write("---")
+        try:
+            import auditorias
+            if hasattr(auditorias, "mostrar_modulo_auditorias"):
+                auditorias.mostrar_modulo_auditorias()
+            else:
+                st.info("Módulo de Planificación y Ejecución de Auditorías. Listo para recibir la función 'mostrar_modulo_auditorias'.")
+        except ModuleNotFoundError:
+            st.warning("El archivo modular 'auditorias.py' aún no ha sido creado en el directorio.")
+
+    elif modulo_seleccionado == "🔄 Gestión de Procesos":
+        st.title("🔄 Gestión de Procesos")
+        st.write("---")
+        try:
+            import procesos
+            if hasattr(procesos, "mostrar_modulo_procesos"):
+                procesos.mostrar_modulo_procesos()
+            else:
+                st.info("Módulo de Caracterización de Procesos y Flujogramas. Listo para recibir la función 'mostrar_modulo_procesos'.")
+        except ModuleNotFoundError:
+            st.warning("El archivo modular 'procesos.py' aún no ha sido creado en el directorio.")
