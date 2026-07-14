@@ -7,12 +7,15 @@ key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
 # 2. Funciones de Usuario y Login
+# Modifica esta parte en tu database.py:
 def obtener_usuario(email):
     """Busca un usuario y trae los datos de su empresa asociada."""
     try:
         res = supabase.table("usuarios").select("*, empresas(*)").eq("email", email).single().execute()
         return res.data
-    except Exception:
+    except Exception as e:
+        # ESTA LÍNEA DE DIAGNÓSTICO NOS MOSTRARÁ EL ERROR REAL EN PANTALLA:
+        st.error(f"Error de conexión o consulta con Supabase: {e}")
         return None
 
 # 3. Funciones de Filtrado y Seguridad
