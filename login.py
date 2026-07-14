@@ -74,6 +74,9 @@ def mostrar_login():
                         
                         if empresa:
                             try:
+                                # Captura del estado de administración de la empresa
+                                es_admin_empresa = empresa.get('es_administradora', False)
+                                
                                 # Convertir la fecha de vencimiento de manera segura
                                 if isinstance(empresa['fecha_vencimiento'], str):
                                     fecha_ven = datetime.strptime(empresa['fecha_vencimiento'], '%Y-%m-%d').date()
@@ -82,7 +85,8 @@ def mostrar_login():
                                     
                                 hoy = datetime.now().date()
                                 
-                                if hoy > fecha_ven or empresa.get('estado') == 'Mora':
+                                # Validación de Suscripción (Se omite si la empresa es Administradora/TAMTARA)
+                                if not es_admin_empresa and (hoy > fecha_ven or empresa.get('estado') == 'Mora'):
                                     st.error("🚨 Acceso suspendido por vencimiento. Contacte a TAMTARA.")
                                 else:
                                     # Inicialización exitosa de variables de sesión
@@ -92,6 +96,9 @@ def mostrar_login():
                                     st.session_state.empresa_id = user_data['empresa_id']
                                     st.session_state.nombre_empresa = empresa['nombre']
                                     st.session_state.logo_empresa = empresa.get('logo_url')
+                                    
+                                    # NUEVA VARIABLE DE CONTROL DE ACCESO GLOBAL
+                                    st.session_state.es_administradora = es_admin_empresa
                                     
                                     st.success(f"Bienvenido(a), {user_data['nombre_completo']}")
                                     time.sleep(1)
