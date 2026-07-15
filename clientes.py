@@ -1,4 +1,5 @@
 import streamlit as st
+import time # <--- SOLUCIÓN AL NAMEERROR
 from database import supabase
 
 def obtener_todos_los_clientes():
@@ -93,7 +94,7 @@ def mostrar_modulo_clientes():
             cat_modulos = obtener_modulos_sistema()
             licencias_actuales = obtener_licencias_cliente(cliente['id'])
             
-            # Agrupar los submódulos por su módulo padre para una visualización ordenada
+            # Agrupar los submódulos por su módulo padre de manera dinámica
             modulos_agrupados = {}
             for m in cat_modulos:
                 padre = m['nombre_modulo']
