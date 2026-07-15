@@ -369,55 +369,87 @@ def mostrar_modulo_clientes():
                                 time.sleep(1)
                                 st.rerun()
 
-    # --- TAB 2: CREAR CUENTA DE CLIENTE ---
+    # --- TAB 2: CREAR CUENTA DE CLIENTE (SEPARADO Y FLEXIBLE) ---
     with tab_crear:
-        st.subheader("Asistente de Alta para Nuevas Cuentas")
-        st.write("Utiliza este panel para registrar de manera unificada una empresa cliente y su primer usuario Administrador:")
+        st.subheader("Asistente de Registro")
+        st.write("Registra nuevas empresas clientes y gestiona la creación de sus usuarios de forma independiente:")
         st.write("---")
         
-        with st.form("form_alta_completa"):
-            st.markdown("#### 🏢 1. Datos Generales de la Empresa")
-            new_emp_nombre = st.text_input("Nombre de la Empresa o Razón Social", placeholder="Ej. Corporación Melamina SAC")
+        # ==========================================
+        # PARTE 1: CREACIÓN EXCLUSIVA DE LA EMPRESA
+        # ==========================================
+        st.markdown("### 🏢 1. Registrar Nueva Empresa Cliente")
+        
+        col_e1, col_e2, col_e3 = st.columns([2, 1, 1])
+        with col_e1:
+            new_emp_nombre = st.text_input("Nombre de la Empresa o Razón Social", placeholder="Ej. La Exacta", key="txt_new_emp_nom")
+        with col_e2:
+            import datetime
+            new_emp_vencimiento = st.date_input("Vencimiento del Servicio", value=datetime.date.today() + datetime.timedelta(days=365), key="date_new_emp_ven")
+        with col_e3:
+            new_emp_estado = st.selectbox("Estado Inicial", ["Activo", "Mora"], key="sel_new_emp_est")
             
-            col_v1, col_v2 = st.columns(2)
-            with col_v1:
-                import datetime
-                new_emp_vencimiento = st.date_input("Vencimiento del Servicio", value=datetime.date.today() + datetime.timedelta(days=365))
-            with col_v2:
-                new_emp_estado = st.selectbox("Estado Operativo Inicial", ["Activo", "Mora"])
-                
-            st.write("---")
-            st.markdown("#### 👤 2. Cuenta de Administrador Principal del Cliente")
-            st.info("Este usuario tendrá permisos de 'Administrador' dentro de su propia organización para gestionar su SGI.")
-            
-            new_usr_nombre = st.text_input("Nombre Completo del Administrador", placeholder="Ej. Juan Pérez Medina")
-            new_usr_email = st.text_input("Correo de Acceso", placeholder="ejemplo@correoempresa.com")
-            new_usr_pass = st.text_input("Contraseña de Acceso", type="password", placeholder="Deberá ser compartida con el usuario")
-            
-            btn_registrar_cuenta = st.form_submit_button("🚀 Dar de Alta Cuenta Completa", use_container_width=True)
-            
-            if btn_registrar_cuenta:
-                if new_emp_nombre and new_usr_nombre and new_usr_email and new_usr_pass:
-                    # 1. Crear Empresa
-                    empresa_creada = crear_cliente_db(new_emp_nombre, new_emp_vencimiento, new_emp_estado)
-                    
+        btn_crear_solo_empresa = st.button("💾 Registrar Empresa", use_container_width=True, type="primary", key="btn_crear_solo_empresa")
+        
+        if btn_crear_solo_empresa:
+            nombre_emp_limpio = new_emp_nombre.strip() if new_emp_nombre else ""
+            if nombre_emp_limpio:
+                with st.spinner("Registrando empresa..."):
+                    empresa_creada = crear_cliente_db(nombre_emp_limpio, new_emp_vencimiento, new_emp_estado)
                     if empresa_creada:
-                        # 2. Crear Usuario Administrador inicial asociado a la empresa recién creada
+                        st.success(f"🎉 Empresa '{nombre_emp_limpio}' registrada con éxito. Ya aparece en el Directorio.")
+                        time.sleep(1)
+                        st.rerun()
+            else:
+                st.warning("⚠️ Debe ingresar el nombre de la empresa para poder registrarla.")
+
+        st.write("---")
+        
+        # ==========================================
+        # PARTE 2: CREACIÓN DE USUARIOS INDEPENDIENTES
+        # ==========================================
+        st.markdown("### 👤 2. Registrar Usuarios y Colaboradores")
+        st.write("Selecciona una empresa registrada para añadirle un nuevo usuario (puedes crear múltiples usuarios uno por uno):")
+        
+        # Obtenemos la lista actualizada de clientes de la base de datos para el selector
+        lista_clientes = obtener_todos_los_clientes()
+        
+        if not lista_clientes:
+            st.info("Para registrar usuarios, primero debe tener al menos una empresa registrada en la sección de arriba.")
+        else:
+            # Creamos un diccionario para mapear el nombre de la empresa con su ID
+            dict_empresas = {cli['nombre']: cli['id'] for cli in lista_clientes}
+            
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                empresa_seleccionada_nom = st.selectbox("Asociar al Cliente:", options=list(dict_empresas.keys()), key="sel_usr_emp_asoc")
+                new_usr_nombre = st.text_input("Nombre Completo del Colaborador", placeholder="Ej. Arturo Díaz", key="txt_new_usr_nom")
+                new_usr_rol = st.selectbox("Rol asignado en el SGI", ["Administrador", "Operador", "Visualizador"], key="sel_new_usr_rol")
+            with col_u2:
+                new_usr_email = st.text_input("Correo de Acceso (Email)", placeholder="ejemplo@gmail.com", key="txt_new_usr_mail")
+                new_usr_pass = st.text_input("Contraseña de Acceso", type="password", placeholder="Contraseña inicial", key="txt_new_usr_pass")
+                
+            st.write("")
+            btn_crear_usuario_suelto = st.button("➕ Registrar y Vincular Usuario", use_container_width=True, key="btn_crear_usuario_suelto")
+            
+            if btn_crear_usuario_suelto:
+                nombre_usr_limpio = new_usr_nombre.strip() if new_usr_nombre else ""
+                email_usr_limpio = new_usr_email.strip() if new_usr_email else ""
+                pass_usr_limpio = new_usr_pass.strip() if new_usr_pass else ""
+                emp_id_asociado = dict_empresas[empresa_seleccionada_nom]
+                
+                if nombre_usr_limpio and email_usr_limpio and pass_usr_limpio:
+                    with st.spinner("Registrando usuario colaborador..."):
                         exito_usuario = crear_usuario_db(
-                            email=new_usr_email,
-                            password=new_usr_pass,
-                            nombre=new_usr_nombre,
-                            rol="Administrador",
-                            empresa_id=empresa_creada["id"]
+                            email=email_usr_limpio,
+                            password=pass_usr_limpio,
+                            nombre=nombre_usr_limpio,
+                            rol=new_usr_rol,
+                            empresa_id=emp_id_asociado
                         )
-                        
                         if exito_usuario:
-                            st.success(f"🎉 ¡Cuenta corporativa '{new_emp_nombre}' creada con éxito! El usuario '{new_usr_nombre}' ya puede ingresar.")
-                            time.sleep(2)
+                            st.success(f"🎉 Usuario '{nombre_usr_limpio}' registrado exitosamente para la empresa '{empresa_seleccionada_nom}'.")
+                            time.sleep(1.5)
                             st.rerun()
-                        else:
-                            # Rollback manual simple si falla el usuario para no dejar data huérfana
-                            eliminar_cliente_db(empresa_creada["id"])
-                            st.error("Error al registrar el usuario administrador. Se canceló la creación de la empresa.")
                 else:
-                    st.warning("Por favor complete todos los datos obligatorios para poder realizar el alta.")
+                    st.warning("⚠️ Todos los campos de la sección de usuario son obligatorios.")
