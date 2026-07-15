@@ -152,6 +152,31 @@ def guardar_licencias_cliente(empresa_id, llaves_seleccionadas):
 # 2. INTERFAZ GRÁFICA (VISTAS DE STREAMLIT)
 # =========================================================================
 
+@st.dialog("⚠️ Confirmar Eliminación de Cliente")
+def confirmar_eliminacion_cliente(cliente):
+    """Muestra una ventana modal flotante para confirmar la eliminación segura de un cliente."""
+    st.warning(
+        f"Está a punto de eliminar de forma permanente a la empresa **{cliente['nombre']}**."
+    )
+    st.error(
+        "🚨 **¡ATENCIÓN!** Esta acción es irreversible. Se borrarán automáticamente "
+        "todos los usuarios registrados bajo esta empresa y se cancelarán todas sus licencias activas."
+    )
+    st.write("¿Realmente desea proceder con la eliminación?")
+    
+    col_si, col_no = st.columns(2)
+    with col_si:
+        if st.button("Sí, Eliminar", use_container_width=True, type="primary", key=f"confirm_yes_{cliente['id']}"):
+            with st.spinner("Eliminando cliente y dependencias..."):
+                if eliminar_cliente_db(cliente['id']):
+                    st.success(f"La empresa '{cliente['nombre']}' ha sido eliminada.")
+                    time.sleep(1.5)
+                    st.rerun()
+    with col_no:
+        if st.button("No, Cancelar", use_container_width=True, key=f"confirm_no_{cliente['id']}"):
+            st.rerun()
+
+
 def mostrar_modulo_clientes():
     # Inicialización de estados de navegación persistentes
     if "cliente_seleccionado" not in st.session_state:
@@ -364,10 +389,7 @@ def mostrar_modulo_clientes():
                             st.rerun()
                     with ca3:
                         if st.button("❌", key=f"btn_del_cli_{cli['id']}", use_container_width=True, type="primary", help="Eliminar Empresa"):
-                            if eliminar_cliente_db(cli['id']):
-                                st.success("Cliente eliminado.")
-                                time.sleep(1)
-                                st.rerun()
+                            confirmar_eliminacion_cliente(cli)
 
     # --- TAB 2: CREAR CUENTA DE CLIENTE (SEPARADO Y FLEXIBLE) ---
     with tab_crear:
