@@ -263,7 +263,7 @@ def mostrar_modulo_clientes():
             st.subheader(f"✏️ Editar Cuenta: {cli_edit['nombre']}")
         with col_cab_der:
             # Cambiamos a tipo "secondary" y el texto a "Volver sin Guardar"
-            if st.button("⬅️ Volver sin Guardar", use_container_width=True, type="secondary", key="btn_volver_sin_guardar_hdr"):
+            if st.button("⬅️ Volver", use_container_width=True, type="secondary", key="btn_volver_sin_guardar_hdr"):
                 st.session_state.editando_empresa = None
                 st.session_state.editando_usuario = None
                 st.session_state.perfil_seleccionado_permisos = None
