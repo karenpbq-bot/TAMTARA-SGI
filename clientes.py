@@ -257,11 +257,13 @@ def mostrar_modulo_clientes():
     if st.session_state.editando_empresa is not None:
         cli_edit = st.session_state.editando_empresa
         
+        # === NUEVO CÓDIGO CORREGIDO ===
         col_cab_izq, col_cab_der = st.columns([3, 1])
         with col_cab_izq:
             st.subheader(f"✏️ Editar Cuenta: {cli_edit['nombre']}")
         with col_cab_der:
-            if st.button("⬅️ Guardar y Volver", use_container_width=True, type="primary"):
+            # Cambiamos a tipo "secondary" y el texto a "Volver sin Guardar"
+            if st.button("⬅️ Volver sin Guardar", use_container_width=True, type="secondary", key="btn_volver_sin_guardar_hdr"):
                 st.session_state.editando_empresa = None
                 st.session_state.editando_usuario = None
                 st.session_state.perfil_seleccionado_permisos = None
