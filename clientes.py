@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import datetime
 from database import supabase
 
 # =========================================================================
@@ -15,14 +16,18 @@ def obtener_todos_los_clientes():
         st.error(f"Error al obtener clientes: {e}")
         return []
 
-def crear_cliente_db(nombre, fecha_ven, estado):
+def crear_cliente_db(nombre, fecha_ven, estado, ruc=None, nom_con=None, nro_con=None, mail_con=None):
     """Inserta una nueva empresa en la base de datos y retorna su registro."""
     try:
         data = {
             "nombre": nombre,
             "fecha_vencimiento": str(fecha_ven),
             "estado": estado,
-            "es_administradora": False
+            "es_administradora": False,
+            "ruc": ruc.strip() if ruc and ruc.strip() != "" else None,
+            "nombre_contacto": nom_con.strip() if nom_con and nom_con.strip() != "" else None,
+            "nro_contacto": nro_con.strip() if nro_con and nro_con.strip() != "" else None,
+            "correo_contacto": mail_con.strip().lower() if mail_con and mail_con.strip() != "" else None
         }
         res = supabase.table("empresas").insert(data).execute()
         if res.data:
@@ -32,13 +37,17 @@ def crear_cliente_db(nombre, fecha_ven, estado):
         st.error(f"Error al registrar la empresa: {e}")
         return None
 
-def actualizar_cliente_db(empresa_id, nombre, fecha_ven, estado):
-    """Actualiza los datos básicos de una empresa cliente."""
+def actualizar_cliente_db(empresa_id, nombre, fecha_ven, estado, ruc=None, nom_con=None, nro_con=None, mail_con=None):
+    """Actualiza los datos de una empresa cliente en Supabase."""
     try:
         data = {
             "nombre": nombre,
             "fecha_vencimiento": str(fecha_ven),
-            "estado": estado
+            "estado": estado,
+            "ruc": ruc.strip() if ruc and ruc.strip() != "" else None,
+            "nombre_contacto": nom_con.strip() if nom_con and nom_con.strip() != "" else None,
+            "nro_contacto": nro_con.strip() if nro_con and nro_con.strip() != "" else None,
+            "correo_contacto": mail_con.strip().lower() if mail_con and mail_con.strip() != "" else None
         }
         supabase.table("empresas").update(data).eq("id", empresa_id).execute()
         return True
@@ -69,7 +78,6 @@ def obtener_usuarios_por_empresa(empresa_id):
 def crear_usuario_db(email, password, nombre, rol, empresa_id):
     """Crea un nuevo colaborador para una empresa cliente."""
     try:
-        # Verificar si el correo ya existe de forma insensible a mayúsculas/minúsculas
         check_usr = supabase.table("usuarios").select("id").ilike("email", email.strip()).execute()
         if check_usr.data:
             st.error("❌ Error: Ya existe un usuario registrado con este correo electrónico.")
@@ -77,7 +85,7 @@ def crear_usuario_db(email, password, nombre, rol, empresa_id):
             
         data = {
             "email": email.strip().lower(),
-            "password_hash": password,  # Contraseña almacenada de forma directa
+            "password_hash": password,
             "nombre_completo": nombre,
             "rol": rol,
             "empresa_id": empresa_id
@@ -96,7 +104,6 @@ def actualizar_usuario_db(usuario_id, email, nombre, rol, password=None):
             "nombre_completo": nombre,
             "rol": rol
         }
-        # Solo actualizamos la contraseña si se digitó un valor nuevo en el campo
         if password and password.strip() != "":
             data["password_hash"] = password
             
@@ -155,9 +162,7 @@ def guardar_licencias_cliente(empresa_id, llaves_seleccionadas):
 @st.dialog("⚠️ Confirmar Eliminación de Cliente")
 def confirmar_eliminacion_cliente(cliente):
     """Muestra una ventana modal flotante para confirmar la eliminación segura de un cliente."""
-    st.warning(
-        f"Está a punto de eliminar de forma permanente a la empresa **{cliente['nombre']}**."
-    )
+    st.warning(f"Está a punto de eliminar de forma permanente a la empresa **{cliente['nombre']}**.")
     st.error(
         "🚨 **¡ATENCIÓN!** Esta acción es irreversible. Se borrarán automáticamente "
         "todos los usuarios registrados bajo esta empresa y se cancelarán todas sus licencias activas."
@@ -167,7 +172,7 @@ def confirmar_eliminacion_cliente(cliente):
     col_si, col_no = st.columns(2)
     with col_si:
         if st.button("Sí, Eliminar", use_container_width=True, type="primary", key=f"confirm_yes_{cliente['id']}"):
-            with st.spinner("Eliminando cliente y dependencias..."):
+            with st.spinner("Eliminando cliente..."):
                 if eliminar_cliente_db(cliente['id']):
                     st.success(f"La empresa '{cliente['nombre']}' ha sido eliminada.")
                     time.sleep(1.5)
@@ -178,19 +183,23 @@ def confirmar_eliminacion_cliente(cliente):
 
 
 def mostrar_modulo_clientes():
-    # Inicialización de estados de navegación persistentes
     if "cliente_seleccionado" not in st.session_state:
         st.session_state.cliente_seleccionado = None
     if "editando_empresa" not in st.session_state:
         st.session_state.editando_empresa = None
     if "editando_usuario" not in st.session_state:
         st.session_state.editando_usuario = None
+        
+    if "id_empresa_recien_creada" not in st.session_state:
+        st.session_state.id_empresa_recien_creada = None
+    if "nombre_empresa_recien_creada" not in st.session_state:
+        st.session_state.nombre_empresa_recien_creada = None
 
     # =========================================================================
     # DETALLE DE GESTIÓN (RUTAS SECUNDARIAS)
     # =========================================================================
     
-    # RUTA B.1: Gestión de Accesos y Usuarios de un Cliente
+    # RUTA B.1: Gestión de Accesos de un Cliente (Licencias)
     if st.session_state.cliente_seleccionado is not None:
         cliente = st.session_state.cliente_seleccionado
         
@@ -202,75 +211,121 @@ def mostrar_modulo_clientes():
         st.write(f"ID del Cliente: `{cliente['id']}` | Estado: **{cliente['estado']}**")
         st.write("---")
         
-        col_licencias, col_usuarios = st.columns([1, 1])
+        st.markdown("### 🔌 Módulos y Submódulos Activos")
+        st.write("Configura los accesos directos para la empresa:")
         
-        # --- COLUMNA LICENCIAS (ACTIVAR / DESACTIVAR SUBMÓDULOS) ---
-        with col_licencias:
-            st.markdown("### 🔌 Módulos y Submódulos Activos")
-            st.write("Configura los accesos directos para la empresa:")
+        cat_modulos = obtener_modulos_sistema()
+        licencias_actuales = obtener_licencias_cliente(cliente['id'])
+        
+        modulos_agrupados = {}
+        for m in cat_modulos:
+            padre = m['nombre_modulo']
+            if padre not in modulos_agrupados:
+                modulos_agrupados[padre] = []
+            modulos_agrupados[padre].append(m)
+        
+        with st.form("form_licencias"):
+            nuevas_licencias = []
+            for modulo_padre, subm_list in modulos_agrupados.items():
+                with st.expander(f"📦 {modulo_padre}", expanded=True):
+                    for subm in subm_list:
+                        esta_activo = subm['llave_tecnica'] in licencias_actuales
+                        seleccionado = st.checkbox(
+                            label=subm['nombre_submodulo'],
+                            value=esta_activo,
+                            key=f"chk_{cliente['id']}_{subm['llave_tecnica']}"
+                        )
+                        if seleccionado:
+                            nuevas_licencias.append(subm['llave_tecnica'])
             
-            cat_modulos = obtener_modulos_sistema()
-            licencias_actuales = obtener_licencias_cliente(cliente['id'])
+            btn_guardar_lic = st.form_submit_button("💾 Guardar Cambios de Licencia", use_container_width=True)
+            if btn_guardar_lic:
+                if guardar_licencias_cliente(cliente['id'], nuevas_licencias):
+                    st.success("¡Licencias actualizadas exitosamente!")
+                    time.sleep(1)
+                    st.rerun()
+        return
+
+    # RUTA B.2: Edición Completa de Datos de Empresa Cliente y sus Usuarios
+    if st.session_state.editando_empresa is not None:
+        cli_edit = st.session_state.editando_empresa
+        
+        if st.button("⬅️ Cancelar y Volver", key="btn_cancel_edit_global"):
+            st.session_state.editando_empresa = None
+            st.session_state.editando_usuario = None
+            st.rerun()
             
-            modulos_agrupados = {}
-            for m in cat_modulos:
-                padre = m['nombre_modulo']
-                if padre not in modulos_agrupados:
-                    modulos_agrupados[padre] = []
-                modulos_agrupados[padre].append(m)
-            
-            with st.form("form_licencias"):
-                nuevas_licencias = []
-                for modulo_padre, subm_list in modulos_agrupados.items():
-                    with st.expander(f"📦 {modulo_padre}", expanded=True):
-                        for subm in subm_list:
-                            esta_activo = subm['llave_tecnica'] in licencias_actuales
-                            seleccionado = st.checkbox(
-                                label=subm['nombre_submodulo'],
-                                value=esta_activo,
-                                key=f"chk_{cliente['id']}_{subm['llave_tecnica']}"
-                            )
-                            if seleccionado:
-                                nuevas_licencias.append(subm['llave_tecnica'])
+        st.subheader(f"✏️ Modificar Información Integral: {cli_edit['nombre']}")
+        st.write("---")
+        
+        col_datos_emp, col_usuarios_emp = st.columns([1.1, 0.9])
+        
+        # --- Columna Izquierda: Formulario de Empresa ---
+        with col_datos_emp:
+            st.markdown("#### 🏢 Datos de la Empresa")
+            with st.form("form_edit_emp"):
+                nuevo_nombre_emp = st.text_input("Nombre de la Empresa", value=cli_edit['nombre'])
                 
-                btn_guardar_lic = st.form_submit_button("💾 Guardar Cambios de Licencia", use_container_width=True)
-                if btn_guardar_lic:
-                    if guardar_licencias_cliente(cliente['id'], nuevas_licencias):
-                        st.success("¡Licencias actualizadas exitosamente!")
+                c_ruc, c_ven = st.columns(2)
+                with c_ruc:
+                    nuevo_ruc = st.text_input("RUC (Opcional)", value=cli_edit.get('ruc') or "")
+                with c_ven:
+                    fecha_v_act = datetime.datetime.strptime(cli_edit['fecha_vencimiento'], "%Y-%m-%d").date() if isinstance(cli_edit['fecha_vencimiento'], str) else cli_edit['fecha_vencimiento']
+                    nueva_fecha_v = st.date_input("Fecha de Vencimiento", value=fecha_v_act)
+                
+                st.markdown("**👤 Información de Contacto Directo**")
+                nuevo_nom_con = st.text_input("Nombre de Contacto (Opcional)", value=cli_edit.get('nombre_contacto') or "")
+                
+                c_tel, c_mail = st.columns(2)
+                with c_tel:
+                    nuevo_nro_con = st.text_input("Número de Contacto (Opcional)", value=cli_edit.get('nro_contacto') or "")
+                with c_mail:
+                    nuevo_mail_con = st.text_input("Correo de Contacto (Opcional)", value=cli_edit.get('correo_contacto') or "")
+                
+                nuevo_estado_emp = st.selectbox("Estado de Cuenta", ["Activo", "Mora"], index=0 if cli_edit['estado'] == 'Activo' else 1)
+                
+                btn_save = st.form_submit_button("💾 Actualizar Empresa", use_container_width=True)
+                if btn_save:
+                    if actualizar_cliente_db(cli_edit['id'], nuevo_nombre_emp, nueva_fecha_v, nuevo_estado_emp, nuevo_ruc, nuevo_nom_con, nuevo_nro_con, nuevo_mail_con):
+                        st.success("¡Datos de la empresa actualizados!")
+                        cli_edit['nombre'] = nuevo_nombre_emp
+                        cli_edit['fecha_vencimiento'] = str(nueva_fecha_v)
+                        cli_edit['estado'] = nuevo_estado_emp
+                        cli_edit['ruc'] = nuevo_ruc
+                        cli_edit['nombre_contacto'] = nuevo_nom_con
+                        cli_edit['nro_contacto'] = nuevo_nro_con
+                        cli_edit['correo_contacto'] = nuevo_mail_con
+                        st.session_state.editando_empresa = cli_edit
                         time.sleep(1)
                         st.rerun()
 
-        # --- COLUMNA GESTIÓN DE USUARIOS DEL CLIENTE ---
-        with col_usuarios:
-            st.markdown("### 👥 Colaboradores y Usuarios")
+        # --- Columna Derecha: Gestión Completa de Usuarios del Cliente ---
+        with col_usuarios_emp:
+            st.markdown("#### 👥 Usuarios Asociados")
             
-            # Formulario Colapsable para crear un nuevo usuario directamente aquí
-            with st.expander("➕ Registrar Nuevo Usuario para este Cliente", expanded=False):
-                with st.form("form_nuevo_usr"):
-                    u_nombre = st.text_input("Nombre Completo")
-                    u_email = st.text_input("Correo Electrónico (Será su Login)")
-                    u_rol = st.selectbox("Rol en el SGI", ["Administrador", "Operador", "Visualizador"])
-                    u_pass = st.text_input("Contraseña Inicial", type="password")
-                    btn_crear_usr = st.form_submit_button("Crear Colaborador", use_container_width=True)
-                    
-                    if btn_crear_usr:
-                        if u_nombre and u_email and u_pass:
-                            if crear_usuario_db(u_email, u_pass, u_nombre, u_rol, cliente['id']):
-                                st.success(f"¡Usuario '{u_nombre}' registrado de forma exitosa!")
-                                time.sleep(1)
-                                st.rerun()
-                        else:
-                            st.warning("Complete todos los campos del usuario.")
-            
+            with st.expander("➕ Registrar y agregar nuevo usuario", expanded=False):
+                u_nombre = st.text_input("Nombre Completo", key="add_u_nom")
+                u_email = st.text_input("Correo Electrónico (Login)", key="add_u_mail")
+                u_rol = st.selectbox("Rol", ["Administrador", "Operador", "Visualizador"], key="add_u_rol")
+                u_pass = st.text_input("Contraseña Inicial", type="password", key="add_u_pass")
+                
+                if st.button("Guardar y Vincular Colaborador", use_container_width=True, type="primary", key="add_u_btn"):
+                    if u_nombre and u_email and u_pass:
+                        if crear_usuario_db(u_email, u_pass, u_nombre, u_rol, cli_edit['id']):
+                            st.success(f"¡Usuario '{u_nombre}' agregado con éxito!")
+                            time.sleep(1)
+                            st.rerun()
+                    else:
+                        st.warning("Debe completar todos los campos del usuario.")
+                        
             st.write("---")
-            usuarios = obtener_usuarios_por_empresa(cliente['id'])
+            usuarios = obtener_usuarios_por_empresa(cli_edit['id'])
             
             if not usuarios:
-                st.warning("Este cliente no tiene usuarios asociados.")
+                st.warning("Esta empresa no cuenta con usuarios registrados en este momento.")
             else:
                 for usr in usuarios:
                     with st.container(border=True):
-                        # Si estamos editando este usuario específico
                         if st.session_state.editando_usuario == usr['id']:
                             st.markdown(f"**✏️ Editando Usuario: {usr['nombre_completo']}**")
                             edit_u_nombre = st.text_input("Nombre Completo", value=usr['nombre_completo'], key=f"ed_unom_{usr['id']}")
@@ -291,7 +346,6 @@ def mostrar_modulo_clientes():
                                     st.session_state.editando_usuario = None
                                     st.rerun()
                         else:
-                            # Vista normal del usuario en el listado
                             st.markdown(f"**👤 {usr['nombre_completo']}**")
                             st.text(f"Correo: {usr['email']}")
                             st.text(f"Rol Actual: {usr['rol']}")
@@ -302,40 +356,11 @@ def mostrar_modulo_clientes():
                                     st.session_state.editando_usuario = usr['id']
                                     st.rerun()
                             with c2:
-                                # Eliminación con doble confirmación implícita
-                                if st.button("❌ Eliminar", key=f"btn_del_u_view_{usr['id']}", use_container_width=True, type="primary"):
+                                if st.button("❌ Eliminar Colaborador", key=f"btn_del_u_view_{usr['id']}", use_container_width=True, type="primary"):
                                     if eliminar_usuario_db(usr['id']):
-                                        st.success("Usuario eliminado.")
+                                        st.success("Colaborador eliminado.")
                                         time.sleep(1)
                                         st.rerun()
-        return
-
-    # RUTA B.2: Edición de Datos de Empresa Cliente
-    if st.session_state.editando_empresa is not None:
-        cli_edit = st.session_state.editando_empresa
-        st.subheader(f"✏️ Modificar Información: {cli_edit['nombre']}")
-        
-        with st.form("form_edit_emp"):
-            nuevo_nombre_emp = st.text_input("Nombre de la Empresa", value=cli_edit['nombre'])
-            import datetime
-            fecha_v_act = datetime.datetime.strptime(cli_edit['fecha_vencimiento'], "%Y-%m-%d").date() if isinstance(cli_edit['fecha_vencimiento'], str) else cli_edit['fecha_vencimiento']
-            nueva_fecha_v = st.date_input("Fecha de Vencimiento", value=fecha_v_act)
-            nuevo_estado_emp = st.selectbox("Estado de Cuenta", ["Activo", "Mora"], index=0 if cli_edit['estado'] == 'Activo' else 1)
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                btn_save = st.form_submit_button("💾 Guardar Cambios", use_container_width=True)
-                if btn_save:
-                    if actualizar_cliente_db(cli_edit['id'], nuevo_nombre_emp, nueva_fecha_v, nuevo_estado_emp):
-                        st.success("¡Datos actualizados!")
-                        st.session_state.editando_empresa = None
-                        time.sleep(1)
-                        st.rerun()
-            with c2:
-                btn_cancel = st.form_submit_button("Cancelar", use_container_width=True)
-                if btn_cancel:
-                    st.session_state.editando_empresa = None
-                    st.rerun()
         return
 
 
@@ -355,123 +380,167 @@ def mostrar_modulo_clientes():
         if not clientes:
             st.info("No hay cuentas de clientes registradas en la plataforma.")
         else:
-            cols_cabecera = st.columns([1, 3, 2, 2, 4])
+            cols_cabecera = st.columns([1, 2.5, 2, 2, 2.5, 3])
             with cols_cabecera[0]: st.markdown("**ID**")
             with cols_cabecera[1]: st.markdown("**Empresa**")
-            with cols_cabecera[2]: st.markdown("**Vencimiento**")
-            with cols_cabecera[3]: st.markdown("**Estado**")
-            with cols_cabecera[4]: st.markdown("**Acciones de Control**")
+            with cols_cabecera[2]: st.markdown("**RUC**")
+            with cols_cabecera[3]: st.markdown("**Vencimiento**")
+            with cols_cabecera[4]: st.markdown("**Estado**")
+            with cols_cabecera[5]: st.markdown("**Acciones**")
             st.write("---")
             
             for cli in clientes:
-                cols_fila = st.columns([1, 3, 2, 2, 4])
+                cols_fila = st.columns([1, 2.5, 2, 2, 2.5, 3])
                 with cols_fila[0]:
                     st.write(cli['id'])
                 with cols_fila[1]:
                     st.markdown(f"**{cli['nombre']}**")
                 with cols_fila[2]:
-                    st.write(cli['fecha_vencimiento'])
+                    st.write(cli.get('ruc') or "—")
                 with cols_fila[3]:
+                    st.write(cli['fecha_vencimiento'])
+                with cols_fila[4]:
                     if cli['estado'] == 'Activo':
                         st.success("Activo")
                     else:
                         st.error("Mora")
                         
-                with cols_fila[4]:
+                with cols_fila[5]:
                     ca1, ca2, ca3 = st.columns([1.5, 1, 1])
                     with ca1:
-                        if st.button("🔑 Accesos", key=f"btn_acc_{cli['id']}", use_container_width=True):
+                        if st.button("🔑 Accesos", key=f"btn_acc_{cli['id']}", use_container_width=True, help="Activar/Desactivar Módulos"):
                             st.session_state.cliente_seleccionado = cli
                             st.rerun()
                     with ca2:
-                        if st.button("✏️", key=f"btn_edit_cli_{cli['id']}", use_container_width=True, help="Editar Empresa"):
+                        if st.button("✏️", key=f"btn_edit_cli_{cli['id']}", use_container_width=True, help="Editar Datos, Contactos y Usuarios"):
                             st.session_state.editando_empresa = cli
                             st.rerun()
                     with ca3:
-                        if st.button("❌", key=f"btn_del_cli_{cli['id']}", use_container_width=True, type="primary", help="Eliminar Empresa"):
+                        if st.button("❌", key=f"btn_del_cli_{cli['id']}", use_container_width=True, type="primary", help="Eliminar Empresa Completa"):
                             confirmar_eliminacion_cliente(cli)
 
-    # --- TAB 2: CREAR CUENTA DE CLIENTE (SEPARADO Y FLEXIBLE) ---
+    # --- TAB 2: CREAR CUENTA DE CLIENTE (PASO A PASO INTERACTIVO) ---
     with tab_crear:
         st.subheader("Asistente de Registro")
-        st.write("Registra nuevas empresas clientes y gestiona la creación de sus usuarios de forma independiente:")
+        st.write("Registra de forma controlada una nueva empresa y asóciale de forma consecutiva todos los usuarios que desees:")
         st.write("---")
         
-        # ==========================================
-        # PARTE 1: CREACIÓN EXCLUSIVA DE LA EMPRESA
-        # ==========================================
-        st.markdown("### 🏢 1. Registrar Nueva Empresa Cliente")
-        
-        col_e1, col_e2, col_e3 = st.columns([2, 1, 1])
-        with col_e1:
-            new_emp_nombre = st.text_input("Nombre de la Empresa o Razón Social", placeholder="Ej. La Exacta", key="txt_new_emp_nom")
-        with col_e2:
-            import datetime
-            new_emp_vencimiento = st.date_input("Vencimiento del Servicio", value=datetime.date.today() + datetime.timedelta(days=365), key="date_new_emp_ven")
-        with col_e3:
-            new_emp_estado = st.selectbox("Estado Inicial", ["Activo", "Mora"], key="sel_new_emp_est")
+        # =====================================================================
+        # PASO A: REGISTRO DE LA EMPRESA (CON DATOS DE CONTACTO OPCIONALES)
+        # =====================================================================
+        if st.session_state.id_empresa_recien_creada is None:
+            st.markdown("### 🏢 Paso 1: Registrar Datos Generales de la Empresa")
             
-        btn_crear_solo_empresa = st.button("💾 Registrar Empresa", use_container_width=True, type="primary", key="btn_crear_solo_empresa")
-        
-        if btn_crear_solo_empresa:
-            nombre_emp_limpio = new_emp_nombre.strip() if new_emp_nombre else ""
-            if nombre_emp_limpio:
-                with st.spinner("Registrando empresa..."):
-                    empresa_creada = crear_cliente_db(nombre_emp_limpio, new_emp_vencimiento, new_emp_estado)
-                    if empresa_creada:
-                        st.success(f"🎉 Empresa '{nombre_emp_limpio}' registrada con éxito. Ya aparece en el Directorio.")
-                        time.sleep(1)
-                        st.rerun()
-            else:
-                st.warning("⚠️ Debe ingresar el nombre de la empresa para poder registrarla.")
-
-        st.write("---")
-        
-        # ==========================================
-        # PARTE 2: CREACIÓN DE USUARIOS INDEPENDIENTES
-        # ==========================================
-        st.markdown("### 👤 2. Registrar Usuarios y Colaboradores")
-        st.write("Selecciona una empresa registrada para añadirle un nuevo usuario (puedes crear múltiples usuarios uno por uno):")
-        
-        # Obtenemos la lista actualizada de clientes de la base de datos para el selector
-        lista_clientes = obtener_todos_los_clientes()
-        
-        if not lista_clientes:
-            st.info("Para registrar usuarios, primero debe tener al menos una empresa registrada en la sección de arriba.")
+            col_e1, col_e2 = st.columns([2, 1])
+            with col_e1:
+                new_emp_nombre = st.text_input("Nombre de la Empresa o Razón Social (Obligatorio)", placeholder="Ej. La Exacta", key="txt_new_emp_nom")
+            with col_e2:
+                new_emp_ruc = st.text_input("RUC de la Empresa (Opcional)", placeholder="Ej. 20123456789", key="txt_new_emp_ruc")
+                
+            col_e3, col_e4 = st.columns(2)
+            with col_e3:
+                new_emp_vencimiento = st.date_input("Vencimiento del Servicio", value=datetime.date.today() + datetime.timedelta(days=365), key="date_new_emp_ven")
+            with col_e4:
+                new_emp_estado = st.selectbox("Estado Inicial", ["Activo", "Mora"], key="sel_new_emp_est")
+                
+            st.markdown("**👤 Información de Contacto (Opcional)**")
+            new_emp_nom_con = st.text_input("Nombre Completo de Contacto", placeholder="Ej. Arturo Díaz", key="txt_new_emp_nom_con")
+            
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                new_emp_nro_con = st.text_input("Número de Contacto/Teléfono", placeholder="Ej. +51 987654321", key="txt_new_emp_nro_con")
+            with col_c2:
+                new_emp_mail_con = st.text_input("Correo de Contacto", placeholder="ejemplo@contacto.com", key="txt_new_emp_mail_con")
+                
+            st.write("")
+            btn_crear_solo_empresa = st.button("💾 Crear Empresa e Ir a Usuarios", use_container_width=True, type="primary", key="btn_crear_solo_empresa")
+            
+            if btn_crear_solo_empresa:
+                nombre_emp_limpio = new_emp_nombre.strip() if new_emp_nombre else ""
+                if nombre_emp_limpio:
+                    with st.spinner("Registrando empresa..."):
+                        empresa_creada = crear_cliente_db(
+                            nombre_emp_limpio, 
+                            new_emp_vencimiento, 
+                            new_emp_estado,
+                            new_emp_ruc,
+                            new_emp_nom_con,
+                            new_emp_nro_con,
+                            new_emp_mail_con
+                        )
+                        if empresa_creada:
+                            st.session_state.id_empresa_recien_creada = empresa_creada["id"]
+                            st.session_state.nombre_empresa_recien_creada = empresa_creada["nombre"]
+                            st.success(f"🎉 Empresa '{nombre_emp_limpio}' registrada con éxito. Ahora configure sus colaboradores:")
+                            time.sleep(1.5)
+                            st.rerun()
+                else:
+                    st.warning("⚠️ Debe ingresar el nombre de la empresa para poder registrarla.")
+                    
+        # =====================================================================
+        # PASO B: AGREGAR MÚLTIPLES USUARIOS A LA EMPRESA RECIÉN CREADA
+        # =====================================================================
         else:
-            # Creamos un diccionario para mapear el nombre de la empresa con su ID
-            dict_empresas = {cli['nombre']: cli['id'] for cli in lista_clientes}
+            id_emp = st.session_state.id_empresa_recien_creada
+            nom_emp = st.session_state.nombre_empresa_recien_creada
             
+            st.markdown(f"### 👤 Paso 2: Agregar Usuarios a **{nom_emp}**")
+            st.info("Desde este panel puede registrar uno o varios usuarios correlativamente para este cliente recién creado.")
+            
+            usuarios_agregados = obtener_usuarios_por_empresa(id_emp)
+            if usuarios_agregados:
+                st.markdown("**Usuarios registrados hasta el momento:**")
+                for u in usuarios_agregados:
+                    st.write(f"- 👤 **{u['nombre_completo']}** ({u['email']}) - Rol: *{u['rol']}*")
+                st.write("")
+                
             col_u1, col_u2 = st.columns(2)
             with col_u1:
-                empresa_seleccionada_nom = st.selectbox("Asociar al Cliente:", options=list(dict_empresas.keys()), key="sel_usr_emp_asoc")
                 new_usr_nombre = st.text_input("Nombre Completo del Colaborador", placeholder="Ej. Arturo Díaz", key="txt_new_usr_nom")
                 new_usr_rol = st.selectbox("Rol asignado en el SGI", ["Administrador", "Operador", "Visualizador"], key="sel_new_usr_rol")
             with col_u2:
                 new_usr_email = st.text_input("Correo de Acceso (Email)", placeholder="ejemplo@gmail.com", key="txt_new_usr_mail")
                 new_usr_pass = st.text_input("Contraseña de Acceso", type="password", placeholder="Contraseña inicial", key="txt_new_usr_pass")
                 
-            st.write("")
-            btn_crear_usuario_suelto = st.button("➕ Registrar y Vincular Usuario", use_container_width=True, key="btn_crear_usuario_suelto")
-            
-            if btn_crear_usuario_suelto:
-                nombre_usr_limpio = new_usr_nombre.strip() if new_usr_nombre else ""
-                email_usr_limpio = new_usr_email.strip() if new_usr_email else ""
-                pass_usr_limpio = new_usr_pass.strip() if new_usr_pass else ""
-                emp_id_asociado = dict_empresas[empresa_seleccionada_nom]
-                
-                if nombre_usr_limpio and email_usr_limpio and pass_usr_limpio:
-                    with st.spinner("Registrando usuario colaborador..."):
-                        exito_usuario = crear_usuario_db(
-                            email=email_usr_limpio,
-                            password=pass_usr_limpio,
-                            nombre=nombre_usr_limpio,
-                            rol=new_usr_rol,
-                            empresa_id=emp_id_asociado
-                        )
-                        if exito_usuario:
-                            st.success(f"🎉 Usuario '{nombre_usr_limpio}' registrado exitosamente para la empresa '{empresa_seleccionada_nom}'.")
-                            time.sleep(1.5)
-                            st.rerun()
-                else:
-                    st.warning("⚠️ Todos los campos de la sección de usuario son obligatorios.")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                btn_añadir_otro = st.button("➕ Registrar este Usuario y Agregar Otro", use_container_width=True, type="secondary")
+                if btn_añadir_otro:
+                    nombre_usr_limpio = new_usr_nombre.strip() if new_usr_nombre else ""
+                    email_usr_limpio = new_usr_email.strip() if new_usr_email else ""
+                    pass_usr_limpio = new_usr_pass.strip() if new_usr_pass else ""
+                    
+                    if nombre_usr_limpio and email_usr_limpio and pass_usr_limpio:
+                        with st.spinner("Registrando colaborador..."):
+                            if crear_usuario_db(email_usr_limpio, pass_usr_limpio, nombre_usr_limpio, new_usr_rol, id_emp):
+                                st.success(f"¡Usuario '{nombre_usr_limpio}' registrado!")
+                                time.sleep(1)
+                                st.rerun()
+                    else:
+                        st.warning("⚠️ Todos los campos son obligatorios para crear un usuario.")
+                        
+            with col_b2:
+                btn_finalizar = st.button("💾 Registrar y Finalizar Creación", use_container_width=True, type="primary")
+                if btn_finalizar:
+                    nombre_usr_limpio = new_usr_nombre.strip() if new_usr_nombre else ""
+                    email_usr_limpio = new_usr_email.strip() if new_usr_email else ""
+                    pass_usr_limpio = new_usr_pass.strip() if new_usr_pass else ""
+                    
+                    if nombre_usr_limpio or email_usr_limpio or pass_usr_limpio:
+                        if nombre_usr_limpio and email_usr_limpio and pass_usr_limpio:
+                            crear_usuario_db(email_usr_limpio, pass_usr_limpio, nombre_usr_limpio, new_usr_rol, id_emp)
+                        else:
+                            st.warning("⚠️ Llenaste parcialmente los campos del usuario. Se completará el flujo sin guardar este último registro.")
+                            time.sleep(2)
+                    
+                    st.session_state.id_empresa_recien_creada = None
+                    st.session_state.nombre_empresa_recien_creada = None
+                    st.success("¡Proceso de alta corporativa finalizado con éxito!")
+                    time.sleep(1.5)
+                    st.rerun()
+                    
+            st.write("---")
+            if st.button("❌ Salir sin agregar más usuarios", use_container_width=True):
+                st.session_state.id_empresa_recien_creada = None
+                st.session_state.nombre_empresa_recien_creada = None
+                st.rerun()
